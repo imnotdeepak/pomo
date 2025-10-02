@@ -171,7 +171,7 @@ export default function HistoryPopup({ isOpen, onClose }: HistoryPopupProps) {
                 </svg>
               </div>
               <h3 className="text-lg font-semibold text-white">
-                Today's Progress
+                Today&apos;s Progress
               </h3>
             </div>
             <p className="text-3xl font-bold text-[#8ace00]">

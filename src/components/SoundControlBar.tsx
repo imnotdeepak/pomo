@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 
 interface SoundControlBarProps {
   isRunning: boolean;
@@ -35,25 +35,35 @@ export default function SoundControlBar({
 
   // Handle study sound looping - only during focus time (not break time)
   useEffect(() => {
+    const audioElement = studyAudioRef.current;
+
     if (isRunning && !isBreak && selectedStudySound !== "none") {
-      if (studyAudioRef.current) {
-        studyAudioRef.current.loop = true;
-        studyAudioRef.current.volume = studyVolume / 100;
-        studyAudioRef.current.play().catch(console.error);
+      if (audioElement) {
+        audioElement.loop = true;
+        audioElement.volume = studyVolume / 100;
+        audioElement.play().catch(console.error);
       }
     } else {
-      if (studyAudioRef.current) {
-        studyAudioRef.current.pause();
-        studyAudioRef.current.currentTime = 0;
+      if (audioElement) {
+        audioElement.pause();
+        audioElement.currentTime = 0;
       }
     }
 
     return () => {
-      if (studyAudioRef.current) {
-        studyAudioRef.current.pause();
+      if (audioElement) {
+        audioElement.pause();
       }
     };
   }, [isRunning, isBreak, selectedStudySound, studyVolume]);
+
+  const playAlarmSound = useCallback(() => {
+    if (selectedAlarmSound !== "none" && alarmAudioRef.current) {
+      alarmAudioRef.current.volume = 0.7;
+      alarmAudioRef.current.play().catch(console.error);
+      setShowAlarmPopup(true);
+    }
+  }, [selectedAlarmSound]);
 
   // Handle alarm sound when timer finishes
   useEffect(() => {
@@ -65,15 +75,7 @@ export default function SoundControlBar({
         playAlarmSound();
       }
     }
-  }, [onTimerFinish, selectedAlarmSound, isBreak]);
-
-  const playAlarmSound = () => {
-    if (selectedAlarmSound !== "none" && alarmAudioRef.current) {
-      alarmAudioRef.current.volume = 0.7;
-      alarmAudioRef.current.play().catch(console.error);
-      setShowAlarmPopup(true);
-    }
-  };
+  }, [onTimerFinish, selectedAlarmSound, isBreak, playAlarmSound]);
 
   const stopAlarm = () => {
     if (alarmAudioRef.current) {

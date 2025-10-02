@@ -1,7 +1,6 @@
-import { createServerClient } from "@supabase/ssr";
-import { NextResponse, type NextRequest } from "next/server";
+import { NextResponse } from "next/server";
 
-export async function middleware(request: NextRequest) {
+export async function middleware() {
   // For now, let's disable the middleware to avoid authentication issues
   // We'll handle authentication in the components instead
   return NextResponse.next();
