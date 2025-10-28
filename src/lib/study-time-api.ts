@@ -121,7 +121,7 @@ export async function getTodayStudyTime(): Promise<number> {
   }
 }
 
-// Get 60-day heatmap data
+// Get 365-day heatmap data
 export async function getHeatmapData(): Promise<
   { date: string; minutes: number }[]
 > {
@@ -131,9 +131,9 @@ export async function getHeatmapData(): Promise<
     } = await supabase.auth.getUser();
     if (!user) return [];
 
-    const sixtyDaysAgo = new Date();
-    sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
-    const startDate = sixtyDaysAgo.toISOString().split("T")[0];
+    const oneYearAgo = new Date();
+    oneYearAgo.setDate(oneYearAgo.getDate() - 365);
+    const startDate = oneYearAgo.toISOString().split("T")[0];
 
     const { data, error } = await supabase
       .from("daily_stats")
@@ -148,13 +148,13 @@ export async function getHeatmapData(): Promise<
     const heatmapData: { date: string; minutes: number }[] = [];
     const dataMap = new Map(data?.map((d) => [d.date, d.focus_minutes]) || []);
 
-    for (let i = 0; i < 60; i++) {
+    for (let i = 0; i < 365; i++) {
       // Use local date instead of UTC to avoid timezone issues
       const today = new Date();
       const date = new Date(
         today.getFullYear(),
         today.getMonth(),
-        today.getDate() - (59 - i)
+        today.getDate() - (364 - i)
       );
       const dateStr = date.toISOString().split("T")[0];
 

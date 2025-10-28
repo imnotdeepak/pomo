@@ -186,16 +186,16 @@ export default function HistoryPopup({ isOpen, onClose }: HistoryPopupProps) {
           <h3 className="text-lg font-semibold text-white mb-4">
             60-Day Activity Heatmap
           </h3>
-          <div className="grid grid-cols-12 gap-1 mb-4">
+          <div className="flex flex-wrap gap-1 mb-4 overflow-x-auto">
             {historyData.heatmapData.map((day, index) => (
               <div
                 key={day.date}
-                className={`aspect-square rounded-sm ${getHeatmapColor(
+                className={`w-3 h-3 aspect-square rounded-sm ${getHeatmapColor(
                   day.minutes
                 )} border border-white/10 hover:border-white/30 transition-colors cursor-pointer`}
                 title={getHeatmapTooltip(day.date, day.minutes)}
                 style={{
-                  animationDelay: `${index * 10}ms`,
+                  animationDelay: `${index * 5}ms`,
                   animation: "fadeIn 0.3s ease-out forwards",
                   opacity: 0,
                 }}

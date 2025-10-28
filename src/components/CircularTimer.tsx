@@ -43,6 +43,8 @@ export default function CircularTimer({
   const progressRef = useRef<SVGCircleElement>(null);
   const prevIsBreakRef = useRef(timer.isBreak);
   const sessionRecordedRef = useRef(false);
+  const startTimeRef = useRef<number | null>(null);
+  const totalDurationRef = useRef<number>(0);
 
   // Store original times to preserve them when switching modes
   const originalFocusTime = useRef(focusTime);
@@ -76,21 +78,28 @@ export default function CircularTimer({
 
   useEffect(() => {
     if (timer.isRunning) {
+      // Set start time and total duration when timer starts
+      if (startTimeRef.current === null) {
+        startTimeRef.current = Date.now();
+        totalDurationRef.current = timer.isBreak
+          ? timer.breakTime * 60
+          : timer.focusTime * 60;
+      }
+
       intervalRef.current = setInterval(() => {
-        setTimer((prev) => {
-          if (prev.seconds > 0) {
-            return { ...prev, seconds: prev.seconds - 1 };
-          } else if (prev.minutes > 0) {
-            return { ...prev, minutes: prev.minutes - 1, seconds: 59 };
-          } else {
+        if (startTimeRef.current) {
+          const elapsed = (Date.now() - startTimeRef.current) / 1000; // elapsed seconds
+          const remaining = Math.max(0, totalDurationRef.current - elapsed);
+
+          if (remaining <= 0) {
             // Timer finished - immediately switch state
-            const newIsBreak = !prev.isBreak;
-            const completedDuration = prev.isBreak
+            const newIsBreak = !timer.isBreak;
+            const completedDuration = timer.isBreak
               ? originalBreakTime.current
               : originalFocusTime.current;
 
             // Record focus session only once when timer finishes
-            if (!prev.isBreak && !sessionRecordedRef.current) {
+            if (!timer.isBreak && !sessionRecordedRef.current) {
               console.log(
                 "Timer finished - recording focus session:",
                 completedDuration,
@@ -105,23 +114,39 @@ export default function CircularTimer({
               onTimerFinish?.();
             }, 100);
 
-            return {
+            // Reset refs and switch to new mode
+            startTimeRef.current = null;
+            totalDurationRef.current = 0;
+
+            setTimer({
               minutes: newIsBreak
                 ? originalBreakTime.current
                 : originalFocusTime.current,
               seconds: 0,
               isRunning: false,
               isBreak: newIsBreak,
-              focusTime: prev.focusTime,
-              breakTime: prev.breakTime,
-            };
+              focusTime: timer.focusTime,
+              breakTime: timer.breakTime,
+            });
+          } else {
+            // Update display time
+            const minutes = Math.floor(remaining / 60);
+            const seconds = Math.floor(remaining % 60);
+
+            setTimer((prev) => ({
+              ...prev,
+              minutes,
+              seconds,
+            }));
           }
-        });
-      }, 1000);
+        }
+      }, 100); // Update every 100ms for smooth animation
     } else {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
       }
+      // Reset start time when stopped
+      startTimeRef.current = null;
     }
 
     return () => {
@@ -129,17 +154,31 @@ export default function CircularTimer({
         clearInterval(intervalRef.current);
       }
     };
-  }, [timer.isRunning, onTimerFinish]);
+  }, [
+    timer.isRunning,
+    timer.isBreak,
+    timer.focusTime,
+    timer.breakTime,
+    onTimerFinish,
+  ]);
 
-  // Update circle progress based on timer state (discrete updates)
+  // Update circle progress smoothly based on elapsed time
   useEffect(() => {
-    if (progressRef.current) {
+    if (progressRef.current && timer.isRunning && startTimeRef.current) {
+      const elapsed = (Date.now() - startTimeRef.current) / 1000;
+      const progress = Math.min(elapsed / totalDurationRef.current, 1);
+      const strokeDashoffset = circumference - progress * circumference;
+
+      progressRef.current.setAttribute(
+        "stroke-dashoffset",
+        strokeDashoffset.toString()
+      );
+    } else if (progressRef.current && !timer.isRunning) {
+      // Reset progress when not running
+      const remainingSeconds = timer.minutes * 60 + timer.seconds;
       const totalSeconds = timer.isBreak
         ? timer.breakTime * 60
         : timer.focusTime * 60;
-
-      const remainingSeconds = timer.minutes * 60 + timer.seconds;
-
       const progress = (totalSeconds - remainingSeconds) / totalSeconds;
       const strokeDashoffset = circumference - progress * circumference;
 
@@ -147,20 +186,41 @@ export default function CircularTimer({
         "stroke-dashoffset",
         strokeDashoffset.toString()
       );
+    }
 
-      // Check if timer state switched (focus to break or break to focus)
-      if (prevIsBreakRef.current !== timer.isBreak) {
-        prevIsBreakRef.current = timer.isBreak;
-      }
+    // Check if timer state switched (focus to break or break to focus)
+    if (prevIsBreakRef.current !== timer.isBreak) {
+      prevIsBreakRef.current = timer.isBreak;
     }
   }, [
     timer.minutes,
     timer.seconds,
     timer.isBreak,
+    timer.isRunning,
     timer.focusTime,
     timer.breakTime,
     circumference,
   ]);
+
+  // Separate effect for smooth progress updates during timer running
+  useEffect(() => {
+    if (!timer.isRunning || !startTimeRef.current) return;
+
+    const progressInterval = setInterval(() => {
+      if (progressRef.current && startTimeRef.current) {
+        const elapsed = (Date.now() - startTimeRef.current) / 1000;
+        const progress = Math.min(elapsed / totalDurationRef.current, 1);
+        const strokeDashoffset = circumference - progress * circumference;
+
+        progressRef.current.setAttribute(
+          "stroke-dashoffset",
+          strokeDashoffset.toString()
+        );
+      }
+    }, 50); // Update every 50ms for very smooth animation
+
+    return () => clearInterval(progressInterval);
+  }, [timer.isRunning, circumference]);
 
   // Notify parent component about break state changes
   useEffect(() => {
@@ -174,14 +234,17 @@ export default function CircularTimer({
 
   const startTimer = () => {
     sessionRecordedRef.current = false; // Reset flag for new session
+    startTimeRef.current = null; // Reset start time
     setTimer((prev) => ({ ...prev, isRunning: true }));
   };
 
   const stopTimer = () => {
     setTimer((prev) => ({ ...prev, isRunning: false }));
+    startTimeRef.current = null; // Reset start time when stopped
   };
 
   const resetTimer = () => {
+    startTimeRef.current = null; // Reset start time
     if (timer.isBreak) {
       // Skip break - switch to focus mode
       setTimer({
@@ -290,7 +353,7 @@ export default function CircularTimer({
             fill="none"
             strokeLinecap="round"
             strokeDasharray={circumference}
-            className="transition-all duration-1000"
+            className="transition-all duration-100 ease-out"
           />
         </svg>
 
