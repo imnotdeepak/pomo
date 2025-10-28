@@ -14,7 +14,7 @@ interface SoundFiles {
 }
 
 const soundFiles: SoundFiles = {
-  study: ["none", "binaural.mp3", "brown.mp3", "rain.mp3"],
+  study: ["none", "brown.mp3", "rain.MP3"],
   alarms: ["none", "nature.mp3", "waterfall.mp3"],
 };
 
@@ -140,8 +140,11 @@ export default function SoundControlBar({
                 <option key={sound} value={sound} className="bg-black">
                   {sound === "none"
                     ? "None"
-                    : sound.replace(".mp3", "").charAt(0).toUpperCase() +
-                      sound.replace(".mp3", "").slice(1)}
+                    : sound
+                        .replace(/\.(mp3|MP3)$/, "")
+                        .charAt(0)
+                        .toUpperCase() +
+                      sound.replace(/\.(mp3|MP3)$/, "").slice(1)}
                 </option>
               ))}
             </select>
@@ -194,8 +197,11 @@ export default function SoundControlBar({
                 <option key={sound} value={sound} className="bg-black">
                   {sound === "none"
                     ? "None"
-                    : sound.replace(".mp3", "").charAt(0).toUpperCase() +
-                      sound.replace(".mp3", "").slice(1)}
+                    : sound
+                        .replace(/\.(mp3|MP3)$/, "")
+                        .charAt(0)
+                        .toUpperCase() +
+                      sound.replace(/\.(mp3|MP3)$/, "").slice(1)}
                 </option>
               ))}
             </select>
