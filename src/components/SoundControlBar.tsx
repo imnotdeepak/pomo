@@ -14,7 +14,7 @@ interface SoundFiles {
 }
 
 const soundFiles: SoundFiles = {
-  study: ["none", "brown.mp3", "rain.MP3"],
+  study: ["none", "brown.mp3", "rain.mp3"],
   alarms: ["none", "nature.mp3", "waterfall.mp3"],
 };
 
@@ -41,7 +41,10 @@ export default function SoundControlBar({
       if (audioElement) {
         audioElement.loop = true;
         audioElement.volume = studyVolume / 100;
-        audioElement.play().catch(console.error);
+        audioElement.play().catch((error) => {
+          console.error("Failed to play study sound:", error);
+          console.log("Audio src:", audioElement.src);
+        });
       }
     } else {
       if (audioElement) {
@@ -60,7 +63,10 @@ export default function SoundControlBar({
   const playAlarmSound = useCallback(() => {
     if (selectedAlarmSound !== "none" && alarmAudioRef.current) {
       alarmAudioRef.current.volume = 0.7;
-      alarmAudioRef.current.play().catch(console.error);
+      alarmAudioRef.current.play().catch((error) => {
+        console.error("Failed to play alarm sound:", error);
+        console.log("Alarm audio src:", alarmAudioRef.current?.src);
+      });
       setShowAlarmPopup(true);
     }
   }, [selectedAlarmSound]);
