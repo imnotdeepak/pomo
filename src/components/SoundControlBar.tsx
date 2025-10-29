@@ -39,15 +39,22 @@ export default function SoundControlBar({
 
     if (isRunning && !isBreak && selectedStudySound !== "none") {
       if (audioElement) {
+        console.log(`Attempting to play study sound: ${selectedStudySound}`);
+        console.log(`Audio element src: ${audioElement.src}`);
+        console.log(`Audio element readyState: ${audioElement.readyState}`);
         audioElement.loop = true;
         audioElement.volume = studyVolume / 100;
         audioElement.play().catch((error) => {
           console.error("Failed to play study sound:", error);
           console.log("Audio src:", audioElement.src);
+          console.log("Audio readyState:", audioElement.readyState);
         });
+      } else {
+        console.log("No audio element found for study sound");
       }
     } else {
       if (audioElement) {
+        console.log("Pausing study sound");
         audioElement.pause();
         audioElement.currentTime = 0;
       }
@@ -92,6 +99,7 @@ export default function SoundControlBar({
   };
 
   const handleStudySoundChange = (sound: string) => {
+    console.log(`Changing study sound to: ${sound}`);
     setSelectedStudySound(sound);
 
     // Stop current study sound
@@ -221,6 +229,10 @@ export default function SoundControlBar({
           ref={studyAudioRef}
           preload="auto"
           src={`/sounds/study/${selectedStudySound}`}
+          onLoadStart={() => console.log(`Loading study sound: ${selectedStudySound}`)}
+          onCanPlay={() => console.log(`Study sound ready to play: ${selectedStudySound}`)}
+          onError={(e) => console.error(`Failed to load study sound: ${selectedStudySound}`, e)}
+          onLoad={() => console.log(`Study sound loaded: ${selectedStudySound}`)}
         />
       )}
 
