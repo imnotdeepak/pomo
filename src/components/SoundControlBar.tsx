@@ -14,8 +14,27 @@ interface SoundFiles {
 }
 
 const soundFiles: SoundFiles = {
-  study: ["none", "brown.mp3", "rain.mp3"],
-  alarms: ["none", "nature.mp3", "waterfall.mp3"],
+  study: ["none", "binaural", "brown", "classical", "rain"],
+  alarms: ["none", "nature", "waterfall", "relaxing", "waves"],
+};
+
+// Map study sound names to bucket URLs
+const soundUrls: Record<string, string> = {
+  binaural:
+    "https://pub-224ff17c3da94f9bb5e16bce03767951.r2.dev/binaural-beat.mp3",
+  brown: "https://pub-224ff17c3da94f9bb5e16bce03767951.r2.dev/brown-noise.mp3",
+  classical:
+    "https://pub-224ff17c3da94f9bb5e16bce03767951.r2.dev/classical.mp3",
+  rain: "https://pub-224ff17c3da94f9bb5e16bce03767951.r2.dev/rain-sound.mp3",
+};
+
+// Map alarm sound names to bucket URLs
+const alarmUrls: Record<string, string> = {
+  nature: "https://pub-224ff17c3da94f9bb5e16bce03767951.r2.dev/nature.mp3",
+  waterfall:
+    "https://pub-224ff17c3da94f9bb5e16bce03767951.r2.dev/waterfall.mp3",
+  relaxing: "https://pub-224ff17c3da94f9bb5e16bce03767951.r2.dev/Relaxing.mp3",
+  waves: "https://pub-224ff17c3da94f9bb5e16bce03767951.r2.dev/Waves.mp3",
 };
 
 export default function SoundControlBar({
@@ -30,42 +49,41 @@ export default function SoundControlBar({
   const [completedSessionType, setCompletedSessionType] =
     useState<boolean>(false); // false = focus, true = break
 
+  // Use HTML5 audio for study sounds (simpler and faster)
   const studyAudioRef = useRef<HTMLAudioElement | null>(null);
   const alarmAudioRef = useRef<HTMLAudioElement | null>(null);
 
-  // Handle study sound looping - only during focus time (not break time)
+  // Handle study sound playback in response to timer state
   useEffect(() => {
     const audioElement = studyAudioRef.current;
 
     if (isRunning && !isBreak && selectedStudySound !== "none") {
       if (audioElement) {
-        console.log(`Attempting to play study sound: ${selectedStudySound}`);
-        console.log(`Audio element src: ${audioElement.src}`);
-        console.log(`Audio element readyState: ${audioElement.readyState}`);
         audioElement.loop = true;
         audioElement.volume = studyVolume / 100;
         audioElement.play().catch((error) => {
           console.error("Failed to play study sound:", error);
-          console.log("Audio src:", audioElement.src);
-          console.log("Audio readyState:", audioElement.readyState);
         });
-      } else {
-        console.log("No audio element found for study sound");
       }
     } else {
+      // Pause when timer stops, in break, or no sound selected
       if (audioElement) {
-        console.log("Pausing study sound");
         audioElement.pause();
-        audioElement.currentTime = 0;
+        // Don't reset currentTime when pausing - keep position for resume
+        if (isBreak || selectedStudySound === "none") {
+          // Only reset when entering break or clearing sound
+          audioElement.currentTime = 0;
+        }
       }
     }
-
-    return () => {
-      if (audioElement) {
-        audioElement.pause();
-      }
-    };
   }, [isRunning, isBreak, selectedStudySound, studyVolume]);
+
+  // Update volume when it changes
+  useEffect(() => {
+    if (studyAudioRef.current && selectedStudySound !== "none") {
+      studyAudioRef.current.volume = studyVolume / 100;
+    }
+  }, [studyVolume, selectedStudySound]);
 
   const playAlarmSound = useCallback(() => {
     if (selectedAlarmSound !== "none" && alarmAudioRef.current) {
@@ -128,12 +146,11 @@ export default function SoundControlBar({
     setStudyVolume(volume);
   };
 
-  // Separate effect for volume changes to avoid static sound
-  useEffect(() => {
-    if (studyAudioRef.current && selectedStudySound !== "none") {
-      studyAudioRef.current.volume = studyVolume / 100;
-    }
-  }, [studyVolume, selectedStudySound]);
+  // Get the current study sound URL
+  const getStudySoundUrl = () => {
+    if (selectedStudySound === "none") return "";
+    return soundUrls[selectedStudySound] || "";
+  };
 
   return (
     <>
@@ -154,11 +171,7 @@ export default function SoundControlBar({
                 <option key={sound} value={sound} className="bg-black">
                   {sound === "none"
                     ? "None"
-                    : sound
-                        .replace(/\.(mp3|MP3)$/, "")
-                        .charAt(0)
-                        .toUpperCase() +
-                      sound.replace(/\.(mp3|MP3)$/, "").slice(1)}
+                    : sound.charAt(0).toUpperCase() + sound.slice(1)}
                 </option>
               ))}
             </select>
@@ -211,11 +224,7 @@ export default function SoundControlBar({
                 <option key={sound} value={sound} className="bg-black">
                   {sound === "none"
                     ? "None"
-                    : sound
-                        .replace(/\.(mp3|MP3)$/, "")
-                        .charAt(0)
-                        .toUpperCase() +
-                      sound.replace(/\.(mp3|MP3)$/, "").slice(1)}
+                    : sound.charAt(0).toUpperCase() + sound.slice(1)}
                 </option>
               ))}
             </select>
@@ -223,24 +232,20 @@ export default function SoundControlBar({
         </div>
       </div>
 
-      {/* Audio Elements */}
-      {selectedStudySound !== "none" && (
-        <audio
-          ref={studyAudioRef}
-          preload="auto"
-          src={`/sounds/study/${selectedStudySound}`}
-          onLoadStart={() => console.log(`Loading study sound: ${selectedStudySound}`)}
-          onCanPlay={() => console.log(`Study sound ready to play: ${selectedStudySound}`)}
-          onError={(e) => console.error(`Failed to load study sound: ${selectedStudySound}`, e)}
-          onLoad={() => console.log(`Study sound loaded: ${selectedStudySound}`)}
-        />
+      {/* Study Audio Element */}
+      {selectedStudySound !== "none" && getStudySoundUrl() && (
+        <audio ref={studyAudioRef} preload="auto" src={getStudySoundUrl()} />
       )}
 
+      {/* Alarm Audio Element */}
       {selectedAlarmSound !== "none" && (
         <audio
           ref={alarmAudioRef}
           preload="auto"
-          src={`/sounds/alarms/${selectedAlarmSound}`}
+          src={
+            alarmUrls[selectedAlarmSound] ||
+            `/sounds/alarms/${selectedAlarmSound}`
+          }
         />
       )}
 
