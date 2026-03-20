@@ -1,7 +1,6 @@
 "use client";
 
 import { PricingTable, UserButton } from "@clerk/nextjs";
-import { dark } from "@clerk/themes";
 import { Suspense, lazy } from "react";
 
 const Dithering = lazy(() =>
@@ -50,11 +49,8 @@ export default function BillingPage() {
           <PricingTable
             newSubscriptionRedirectUrl="/checkout-success"
             appearance={{
-              baseTheme: dark,
               variables: {
                 colorBackground: "#000000",
-                colorText: "#ffffff",
-                colorTextSecondary: "rgba(255,255,255,0.7)",
                 colorNeutral: "#ffffff",
               },
               elements: {
