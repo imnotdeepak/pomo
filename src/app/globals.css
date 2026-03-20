@@ -22,5 +22,154 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-inter), Arial, Helvetica, sans-serif;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .blob {
+    opacity: 0.18;
+    animation: blob 9s ease-in-out infinite;
+  }
+  .blob-delay-0 { animation-delay: 0s; }
+  .blob-delay-1 { animation-delay: -3s; }
+  .blob-delay-2 { animation-delay: -6s; }
+  .blob-delay-3 { animation-delay: -1.5s; }
+
+  .hero-badge {
+    animation: fadeInUp 0.5s ease-out 0.1s both;
+  }
+  .hero-title {
+    animation: fadeInUp 0.6s ease-out 0.25s both;
+  }
+  .hero-subtitle {
+    animation: fadeInUp 0.6s ease-out 0.4s both;
+  }
+  .hero-buttons {
+    animation: fadeInUp 0.6s ease-out 0.55s both;
+  }
+}
+
+/* Fallback opacity for blobs when reduced-motion is preferred */
+.blob {
+  opacity: 0.18;
+}
+
+@keyframes blob {
+  0%, 100% {
+    transform: scale(1) translate(0, 0);
+    opacity: 0.18;
+  }
+  33% {
+    transform: scale(1.12) translate(18px, -18px);
+    opacity: 0.22;
+  }
+  66% {
+    transform: scale(0.92) translate(-12px, 14px);
+    opacity: 0.14;
+  }
+}
+
+/* Clerk sign-in card — "Last used" badge */
+.cl-badge,
+[class*="cl-badge"],
+.cl-accountSwitcherTrigger [class*="last"],
+.cl-userPreviewSecondaryIdentifier,
+[class*="lastUsed"] {
+  color: #ffffff !important;
+}
+
+/* Clerk auth input placeholder color */
+.cl-formFieldInput::placeholder {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+/* Clerk pricing table — force white text on black background */
+.cl-pricingTable * {
+  color: #ffffff !important;
+}
+.cl-pricingTable [class*="secondary"],
+.cl-pricingTable [class*="subtitle"],
+.cl-pricingTable [class*="description"],
+.cl-pricingTable [class*="caption"] {
+  color: rgba(255, 255, 255, 0.7) !important;
+}
+
+/* Clerk checkout drawer — centered modal style */
+.cl-drawerRoot {
+  z-index: 9999 !important;
+  position: fixed !important;
+  inset: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+.cl-drawerOverlay {
+  z-index: 9998 !important;
+  position: fixed !important;
+  inset: 0 !important;
+  background: rgba(0, 0, 0, 0.75) !important;
+  backdrop-filter: blur(6px) !important;
+}
+.cl-drawerContent {
+  z-index: 9999 !important;
+  position: relative !important;
+  width: 90vw !important;
+  max-width: 560px !important;
+  max-height: 85vh !important;
+  height: auto !important;
+  top: auto !important;
+  left: auto !important;
+  right: auto !important;
+  bottom: auto !important;
+  border-radius: 16px !important;
+  transform: none !important;
+  overflow: hidden !important;
+}
+.cl-drawerBody {
+  z-index: 9999 !important;
+  height: 100% !important;
+  max-height: 85vh !important;
+  overflow-y: auto !important;
+}
+
+/* Clerk checkout drawer — white background */
+.cl-drawerContent {
+  background-color: #ffffff !important;
+}
+.cl-drawerBody {
+  background-color: #ffffff !important;
+}
+
+/* Clerk pricing table — annual/monthly toggle thumb */
+.cl-switchThumb,
+[data-clerk-component] .cl-switchThumb,
+.cl-rootBox .cl-switchThumb {
+  background-color: #ffffff !important;
+  background: #ffffff !important;
+}
+
+/* Focus: blue (#6db0fc ~210°) → green (#8ace00 ~80°) */
+@keyframes focusHue {
+  0%, 100% { filter: hue-rotate(0deg); }
+  50%       { filter: hue-rotate(-130deg); }
+}
+/* Break: purple (#936dfc ~265°) → orange (#fcb96d ~35°) via warm tones */
+@keyframes breakHue {
+  0%, 100% { filter: hue-rotate(55deg); }
+  50%       { filter: hue-rotate(185deg); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .focus-shader       { animation: focusHue 20s ease-in-out infinite; }
+  .focus-shader-break { animation: breakHue 20s ease-in-out infinite; }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }

@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { supabase } from "@/lib/supabase";
 
 interface Task {
   id: string;
@@ -11,13 +10,12 @@ interface Task {
   updated_at?: string;
 }
 
-export default function KanbanBoard() {
+export default function KanbanBoard({ userId }: { userId?: string }) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [newTask, setNewTask] = useState({ title: "" });
   const [showAddForm, setShowAddForm] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  // Load tasks from database
   useEffect(() => {
     loadTasks();
   }, []);
@@ -25,17 +23,9 @@ export default function KanbanBoard() {
   const loadTasks = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
-        .from("tasks")
-        .select("*")
-        .order("created_at", { ascending: false });
-
-      if (error) {
-        console.error("Error loading tasks:", error);
-        return;
-      }
-
-      setTasks(data || []);
+      const res = await fetch("/api/tasks");
+      if (!res.ok) throw new Error(await res.text());
+      setTasks(await res.json());
     } catch (error) {
       console.error("Error loading tasks:", error);
     } finally {
@@ -44,57 +34,31 @@ export default function KanbanBoard() {
   };
 
   const addTask = async () => {
-    if (newTask.title.trim()) {
-      try {
-        // Get current user
-        const {
-          data: { user },
-          error: userError,
-        } = await supabase.auth.getUser();
-
-        if (userError || !user) {
-          console.error("User not authenticated:", userError);
-          return;
-        }
-
-        const { data, error } = await supabase
-          .from("tasks")
-          .insert([
-            {
-              user_id: user.id,
-              title: newTask.title,
-              status: "todo",
-            },
-          ])
-          .select()
-          .single();
-
-        if (error) {
-          console.error("Error adding task:", error);
-          return;
-        }
-
-        setTasks([data, ...tasks]);
-        setNewTask({ title: "" });
-        setShowAddForm(false);
-      } catch (error) {
-        console.error("Error adding task:", error);
-      }
+    if (!newTask.title.trim() || !userId) return;
+    try {
+      const res = await fetch("/api/tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: newTask.title }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      setTasks([data, ...tasks]);
+      setNewTask({ title: "" });
+      setShowAddForm(false);
+    } catch (error) {
+      console.error("Error adding task:", error);
     }
   };
 
   const moveTask = async (taskId: string, newStatus: Task["status"]) => {
     try {
-      const { error } = await supabase
-        .from("tasks")
-        .update({ status: newStatus })
-        .eq("id", taskId);
-
-      if (error) {
-        console.error("Error moving task:", error);
-        return;
-      }
-
+      const res = await fetch("/api/tasks", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: taskId, status: newStatus }),
+      });
+      if (!res.ok) throw new Error(await res.text());
       setTasks(
         tasks.map((task) =>
           task.id === taskId ? { ...task, status: newStatus } : task
@@ -107,22 +71,20 @@ export default function KanbanBoard() {
 
   const deleteTask = async (taskId: string) => {
     try {
-      const { error } = await supabase.from("tasks").delete().eq("id", taskId);
-
-      if (error) {
-        console.error("Error deleting task:", error);
-        return;
-      }
-
+      const res = await fetch("/api/tasks", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: taskId, _delete: true }),
+      });
+      if (!res.ok) throw new Error(await res.text());
       setTasks(tasks.filter((task) => task.id !== taskId));
     } catch (error) {
       console.error("Error deleting task:", error);
     }
   };
 
-  const getTasksByStatus = (status: Task["status"]) => {
-    return tasks.filter((task) => task.status === status);
-  };
+  const getTasksByStatus = (status: Task["status"]) =>
+    tasks.filter((task) => task.status === status);
 
   const columns = [
     { id: "todo", title: "To Do", color: "bg-red-500/10" },
@@ -218,15 +180,12 @@ export default function KanbanBoard() {
                       </h4>
                     </div>
                     <div className="flex items-center space-x-1 ml-2">
-                      {/* Left arrow */}
                       {column.id !== "todo" && (
                         <button
                           onClick={() =>
                             moveTask(
                               task.id,
-                              column.id === "in-progress"
-                                ? "todo"
-                                : "in-progress"
+                              column.id === "in-progress" ? "todo" : "in-progress"
                             )
                           }
                           className="text-white/60 hover:text-white text-sm p-1"
@@ -235,7 +194,6 @@ export default function KanbanBoard() {
                           ←
                         </button>
                       )}
-                      {/* Right arrow */}
                       {column.id !== "done" && (
                         <button
                           onClick={() =>
@@ -250,7 +208,6 @@ export default function KanbanBoard() {
                           →
                         </button>
                       )}
-                      {/* Delete X */}
                       <button
                         onClick={() => deleteTask(task.id)}
                         className="text-red-400 hover:text-red-300 text-lg p-1 mt-1"

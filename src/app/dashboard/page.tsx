@@ -1,79 +1,41 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import { supabase } from "@/lib/supabase";
-import { useRouter } from "next/navigation";
+import React, { useState, Suspense, lazy } from "react";
+import { useAuth, UserButton } from "@clerk/nextjs";
+import { useEffect } from "react"
+
+const Dithering = lazy(() =>
+  import("@paper-design/shaders-react").then((mod) => ({ default: mod.Dithering }))
+);
 import CircularTimer from "@/components/CircularTimer";
 import KanbanBoard from "@/components/KanbanBoard";
 import SoundControlBar from "@/components/SoundControlBar";
 import HistoryPopup from "@/components/HistoryPopup";
-import { User } from "@supabase/supabase-js";
 
 export default function Dashboard() {
-  const [user, setUser] = useState<User | null>(null);
+  const { userId, isLoaded } = useAuth();
   const [showKanban, setShowKanban] = useState(false);
-  const [loading, setLoading] = useState(true);
   const [isBreak, setIsBreak] = useState(false);
-  const [showProfileDropdown, setShowProfileDropdown] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [focusTime, setFocusTime] = useState<number | string>(25);
   const [breakTime, setBreakTime] = useState<number | string>(5);
   const [timerFinished, setTimerFinished] = useState<boolean>(false);
   const [isTimerRunning, setIsTimerRunning] = useState<boolean>(false);
   const [showHistory, setShowHistory] = useState<boolean>(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const router = useRouter();
 
   useEffect(() => {
-    const getUser = async () => {
-      console.log("Dashboard: Getting user...");
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      console.log("Dashboard: User data:", user);
-      if (user) {
-        setUser(user);
-      } else {
-        console.log("Dashboard: No user, redirecting to login");
-        router.push("/login");
-      }
-      setLoading(false);
-    };
+    if (isLoaded && userId) {
+      fetch("/api/users", { method: "POST" }).catch(console.error);
+    }
+  }, [isLoaded, userId]);
 
-    getUser();
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === "SIGNED_OUT" || !session) {
-        router.push("/login");
-      }
-    });
-
-    return () => subscription.unsubscribe();
-  }, [router]);
-
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(event.target as Node)
-      ) {
-        setShowProfileDropdown(false);
-      }
-    };
-
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, []);
-
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    router.push("/");
-  };
+  if (!isLoaded) {
+    return (
+      <div className="min-h-screen bg-black relative flex items-center justify-center">
+        <div className="text-white text-xl">Loading...</div>
+      </div>
+    );
+  }
 
   const handleSaveSettings = () => {
     setShowSettings(false);
@@ -86,51 +48,33 @@ export default function Dashboard() {
     setTimeout(() => setTimerFinished(false), 100);
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-black relative flex items-center justify-center">
-        <div className="text-white text-xl">Loading...</div>
-      </div>
-    );
-  }
+
 
   return (
     <div className="min-h-screen bg-black relative overflow-hidden">
-      <div className="absolute inset-0 bg-[linear-gradient(to_right,#4f4f4f2e_1px,transparent_1px),linear-gradient(to_bottom,#4f4f4f2e_1px,transparent_1px)] bg-[size:14px_24px]" />
-      {/* Background blobs with transitions */}
-      <div
-        className="absolute top-0 -left-4 size-96 blur-[100px] transition-all duration-1000 ease-in-out"
-        style={{
-          backgroundColor: isBreak ? "transparent" : "#6db0fc",
-          opacity: isBreak ? 0 : 0.2,
-        }}
-      />
-      <div
-        className="absolute bottom-0 -left-4 size-96 blur-[100px] transition-all duration-1000 ease-in-out"
-        style={{
-          backgroundColor: isBreak ? "#fcb96d" : "transparent",
-          opacity: isBreak ? 0.2 : 0,
-        }}
-      />
-      <div
-        className="absolute bottom-0 -right-4 size-96 blur-[100px] transition-all duration-1000 ease-in-out"
-        style={{
-          backgroundColor: isBreak ? "transparent" : "#8ace00",
-          opacity: isBreak ? 0 : 0.2,
-        }}
-      />
-      <div
-        className="absolute top-0 -right-4 size-96 blur-[100px] transition-all duration-1000 ease-in-out"
-        style={{
-          backgroundColor: isBreak ? "#936dfc" : "transparent",
-          opacity: isBreak ? 0.2 : 0,
-        }}
-      />
+
+      {/* Dithering shader — always visible, cycles blue → green → blue */}
+      <div className="absolute inset-0 pointer-events-none">
+        <Suspense fallback={null}>
+          <div className={`${isBreak ? "focus-shader-break" : "focus-shader"} absolute inset-0 opacity-60 mix-blend-screen`}>
+            <Dithering
+              colorBack="#00000000"
+              colorFront="#6db0fc"
+              shape="warp"
+              type="4x4"
+              speed={0.3}
+              className="size-full"
+              minPixelRatio={1}
+            />
+          </div>
+        </Suspense>
+      </div>
+
 
       {/* Kanban board button - bottom left */}
       <button
         onClick={() => setShowKanban(!showKanban)}
-        className="fixed bottom-6 left-6 z-20 bg-black/20 hover:bg-black/30 backdrop-blur-md border border-white/30 text-white p-3 rounded-lg transition-all duration-1000"
+        className="fixed bottom-6 left-6 z-20 bg-black/20 hover:bg-black/30 backdrop-blur-md border border-white/30 text-white p-3 rounded-lg transition-all duration-300 hover:scale-110"
         title={showKanban ? "Hide Kanban Board" : "Show Kanban Board"}
       >
         <svg
@@ -152,7 +96,7 @@ export default function Dashboard() {
       {/* History button - bottom right */}
       <button
         onClick={() => setShowHistory(!showHistory)}
-        className="fixed bottom-6 right-6 z-20 bg-black/20 hover:bg-black/30 backdrop-blur-md border border-white/30 text-white p-3 rounded-lg transition-all duration-1000"
+        className="fixed bottom-6 right-6 z-20 bg-black/20 hover:bg-black/30 backdrop-blur-md border border-white/30 text-white p-3 rounded-lg transition-all duration-300 hover:scale-110"
         title="Study History"
       >
         <svg
@@ -174,7 +118,7 @@ export default function Dashboard() {
       <div className="relative z-10 min-h-screen flex flex-col">
         {/* Header */}
         <div className="flex justify-between items-center p-6">
-          <h1 className="text-3xl font-bold text-white">Pomo</h1>
+          <h1 className="text-3xl font-serif font-bold text-white">Pomo</h1>
 
           <div className="flex items-center space-x-3">
             {/* Clock Settings Button */}
@@ -200,61 +144,8 @@ export default function Dashboard() {
               </div>
             </button>
 
-            {/* Profile Dropdown */}
-            <div className="relative" ref={dropdownRef}>
-              <button
-                onClick={() => setShowProfileDropdown(!showProfileDropdown)}
-                className="transition-transform duration-200 hover:scale-105"
-              >
-                {/* Randomized color avatar */}
-                <div
-                  className="w-10 h-10 rounded-full flex items-center justify-center"
-                  style={{
-                    backgroundColor: user?.email
-                      ? ["#6db0fc", "#8ace00"][
-                          user.email
-                            .split("")
-                            .reduce((a, b) => a + b.charCodeAt(0), 0) % 2
-                        ]
-                      : "#6db0fc",
-                  }}
-                >
-                  <span className="text-black font-medium text-sm">
-                    {user?.email?.charAt(0).toUpperCase() || "U"}
-                  </span>
-                </div>
-              </button>
-
-              {/* Dropdown Menu */}
-              {showProfileDropdown && (
-                <div className="absolute right-0 mt-2 w-48 bg-white/10 backdrop-blur-md border border-white/30 rounded-lg shadow-lg z-50">
-                  <div className="py-2">
-                    <div className="px-4 py-2 text-white/60 text-sm border-b border-white/20">
-                      {user?.email}
-                    </div>
-                    <button
-                      onClick={handleLogout}
-                      className="w-full text-left px-4 py-2 text-white hover:bg-white/20 transition-colors flex items-center space-x-2"
-                    >
-                      <svg
-                        className="w-4 h-4"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
-                        />
-                      </svg>
-                      <span>Logout</span>
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
+            {/* Profile - Clerk UserButton */}
+            <UserButton appearance={{ elements: { avatarBox: "w-10 h-10" } }} />
           </div>
         </div>
 
@@ -270,7 +161,7 @@ export default function Dashboard() {
             {/* Settings modal */}
             <div className="relative z-10 w-full max-w-md bg-black/30 backdrop-blur-md rounded-2xl p-6 border border-white/30">
               <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-bold text-white">
+                <h2 className="text-2xl font-serif font-bold text-white">
                   Timer Settings
                 </h2>
                 <button
@@ -356,6 +247,7 @@ export default function Dashboard() {
               onTimerFinish={handleTimerFinish}
               focusTime={typeof focusTime === "number" ? focusTime : 25}
               breakTime={typeof breakTime === "number" ? breakTime : 5}
+              userId={userId ?? undefined}
             />
           </div>
 
@@ -379,7 +271,7 @@ export default function Dashboard() {
               {/* Kanban board modal */}
               <div className="relative z-10 w-full max-w-6xl max-h-[90vh] overflow-y-auto">
                 <div className="flex justify-between items-center mb-4">
-                  <h2 className="text-2xl font-bold text-white">
+                  <h2 className="text-2xl font-serif font-bold text-white">
                     Kanban Board
                   </h2>
                   <button
@@ -389,7 +281,7 @@ export default function Dashboard() {
                     ×
                   </button>
                 </div>
-                <KanbanBoard />
+                <KanbanBoard userId={userId ?? undefined} />
               </div>
             </div>
           )}
@@ -398,6 +290,7 @@ export default function Dashboard() {
           <HistoryPopup
             isOpen={showHistory}
             onClose={() => setShowHistory(false)}
+            userId={userId ?? undefined}
           />
         </div>
       </div>

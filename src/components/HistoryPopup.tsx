@@ -6,9 +6,10 @@ import { getHistoryData, HistoryData } from "@/lib/study-time-api";
 interface HistoryPopupProps {
   isOpen: boolean;
   onClose: () => void;
+  userId?: string;
 }
 
-export default function HistoryPopup({ isOpen, onClose }: HistoryPopupProps) {
+export default function HistoryPopup({ isOpen, onClose, userId }: HistoryPopupProps) {
   const [historyData, setHistoryData] = useState<HistoryData>({
     totalStudyTime: 0,
     todayStudyTime: 0,
@@ -33,8 +34,9 @@ export default function HistoryPopup({ isOpen, onClose }: HistoryPopupProps) {
   }, [isOpen]);
 
   const fetchHistoryData = async () => {
+    if (!userId) return;
     try {
-      const data = await getHistoryData();
+      const data = await getHistoryData(userId);
       setHistoryData(data);
     } catch (error) {
       console.error("Error fetching history data:", error);

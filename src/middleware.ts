@@ -1,20 +1,35 @@
-import { NextResponse } from "next/server";
+import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'
+import { NextResponse } from 'next/server'
 
-export async function middleware() {
-  // For now, let's disable the middleware to avoid authentication issues
-  // We'll handle authentication in the components instead
-  return NextResponse.next();
-}
+const isProtectedRoute = createRouteMatcher(['/dashboard(.*)'])
+const isBillingRoute = createRouteMatcher(['/billing'])
+
+const PLAN_ID = 'access'
+
+export default clerkMiddleware(async (auth, req) => {
+  // Dashboard requires auth + active plan
+  if (isProtectedRoute(req)) {
+    await auth.protect()
+    const { has } = await auth()
+    const hasPlan = has({ plan: PLAN_ID })
+    if (!hasPlan) {
+      return NextResponse.redirect(new URL('/billing', req.url))
+    }
+  }
+
+  // Billing page requires auth (but not plan)
+  if (isBillingRoute(req)) {
+    await auth.protect()
+    const { has } = await auth()
+    if (has({ plan: PLAN_ID })) {
+      return NextResponse.redirect(new URL('/dashboard', req.url))
+    }
+  }
+})
 
 export const config = {
   matcher: [
-    /*
-     * Match all request paths except for the ones starting with:
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     * Feel free to modify this pattern to include more paths.
-     */
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    '/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)',
+    '/(api|trpc)(.*)',
   ],
-};
+}

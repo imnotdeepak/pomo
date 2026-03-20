@@ -18,6 +18,7 @@ interface CircularTimerProps {
   onTimerFinish?: () => void;
   focusTime?: number;
   breakTime?: number;
+  userId?: string;
 }
 
 export default function CircularTimer({
@@ -26,6 +27,7 @@ export default function CircularTimer({
   onTimerFinish,
   focusTime = 25,
   breakTime = 5,
+  userId,
 }: CircularTimerProps) {
   const [timer, setTimer] = useState<TimerState>({
     minutes: 25,
@@ -135,7 +137,7 @@ export default function CircularTimer({
                 "minutes"
               );
               sessionRecordedRef.current = true;
-              recordStudySession(completedDuration);
+              if (userId) recordStudySession(completedDuration, userId);
             }
 
             // Notify parent component that timer finished
