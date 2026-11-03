@@ -2,58 +2,80 @@ import { auth } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
-// GET /api/sessions — fetch history data for the authenticated user
-export async function GET() {
+const HEATMAP_DAYS = 365;
+const PAGE_SIZE = 1000;
+
+// Formats a timestamp as YYYY-MM-DD in the given IANA timezone
+function makeLocalDateFormatter(timeZone: string) {
+  try {
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    });
+  } catch {
+    // Invalid timezone — fall back to UTC
+    return makeLocalDateFormatter("UTC");
+  }
+}
+
+// GET /api/sessions?tz=<IANA timezone> — fetch history data for the authenticated user,
+// bucketed by day in the user's own timezone
+export async function GET(req: NextRequest) {
   const { userId } = await auth();
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const oneYearAgo = new Date();
-  oneYearAgo.setDate(oneYearAgo.getDate() - 365);
-  const startDate = oneYearAgo.toISOString().split("T")[0];
+  const toLocalDate = makeLocalDateFormatter(
+    req.nextUrl.searchParams.get("tz") || "UTC"
+  );
 
-  const today = new Date();
-  const todayStr = new Date(today.getFullYear(), today.getMonth(), today.getDate())
-    .toISOString()
-    .split("T")[0];
+  // Fetch one extra day so the oldest local day is fully covered in any timezone
+  const since = new Date(Date.now() - (HEATMAP_DAYS + 1) * 24 * 60 * 60 * 1000);
 
-  const [statsResult, dailyResult, heatmapResult] = await Promise.all([
-    supabaseAdmin
-      .from("user_stats")
-      .select("total_study_time_minutes")
+  const statsResult = await supabaseAdmin
+    .from("user_stats")
+    .select("total_study_time_minutes")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  const minutesByDate = new Map<string, number>();
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const { data, error } = await supabaseAdmin
+      .from("study_sessions")
+      .select("created_at, duration_minutes")
       .eq("user_id", userId)
-      .single(),
-    supabaseAdmin
-      .from("daily_stats")
-      .select("focus_minutes")
-      .eq("user_id", userId)
-      .eq("date", todayStr)
-      .single(),
-    supabaseAdmin
-      .from("daily_stats")
-      .select("date, focus_minutes")
-      .eq("user_id", userId)
-      .gte("date", startDate)
-      .order("date", { ascending: true }),
-  ]);
+      .gte("created_at", since.toISOString())
+      .order("created_at", { ascending: true })
+      .range(from, from + PAGE_SIZE - 1);
+
+    if (error) {
+      console.error("Error loading sessions:", error);
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    for (const session of data) {
+      const date = toLocalDate.format(new Date(session.created_at));
+      minutesByDate.set(date, (minutesByDate.get(date) ?? 0) + session.duration_minutes);
+    }
+    if (data.length < PAGE_SIZE) break;
+  }
+
+  // Walk back from the user's local "today" using UTC date math (no DST surprises)
+  const todayStr = toLocalDate.format(new Date());
+  const [year, month, day] = todayStr.split("-").map(Number);
+  const heatmapData: { date: string; minutes: number }[] = [];
+  for (let i = HEATMAP_DAYS - 1; i >= 0; i--) {
+    const date = new Date(Date.UTC(year, month - 1, day - i))
+      .toISOString()
+      .split("T")[0];
+    heatmapData.push({ date, minutes: minutesByDate.get(date) ?? 0 });
+  }
 
   const totalStudyTime = statsResult.data?.total_study_time_minutes ?? 0;
-  const todayStudyTime = dailyResult.data?.focus_minutes ?? 0;
-
-  const dataMap = new Map(
-    (heatmapResult.data ?? []).map((d) => [d.date, d.focus_minutes])
-  );
-  const heatmapData: { date: string; minutes: number }[] = [];
-  for (let i = 0; i < 365; i++) {
-    const date = new Date(
-      today.getFullYear(),
-      today.getMonth(),
-      today.getDate() - (364 - i)
-    );
-    const dateStr = date.toISOString().split("T")[0];
-    heatmapData.push({ date: dateStr, minutes: dataMap.get(dateStr) ?? 0 });
-  }
+  const todayStudyTime = minutesByDate.get(todayStr) ?? 0;
 
   return NextResponse.json({ totalStudyTime, todayStudyTime, heatmapData });
 }

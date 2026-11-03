@@ -3,10 +3,22 @@ import { NextResponse } from 'next/server'
 
 const isProtectedRoute = createRouteMatcher(['/dashboard(.*)'])
 const isBillingRoute = createRouteMatcher(['/billing'])
+const isPaidApiRoute = createRouteMatcher(['/api/tasks(.*)', '/api/sessions(.*)'])
 
 const PLAN_ID = 'access'
 
 export default clerkMiddleware(async (auth, req) => {
+  // Paid API routes require auth + active plan (respond with JSON, not redirects)
+  if (isPaidApiRoute(req)) {
+    const { userId, has } = await auth()
+    if (!userId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    if (!has({ plan: PLAN_ID })) {
+      return NextResponse.json({ error: 'Active plan required' }, { status: 403 })
+    }
+  }
+
   // Dashboard requires auth + active plan
   if (isProtectedRoute(req)) {
     await auth.protect()

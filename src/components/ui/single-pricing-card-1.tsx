@@ -4,7 +4,6 @@ import { PlusIcon, ShieldCheckIcon } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Badge } from './badge';
 import { Button } from './button';
-import { cn } from '@/lib/utils';
 import { BorderTrail } from './border-trail';
 
 const Dithering = lazy(() =>

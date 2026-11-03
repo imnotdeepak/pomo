@@ -4,22 +4,45 @@ import { useState, useEffect, useRef } from "react";
 import { recordStudySession } from "@/lib/study-time-api";
 
 interface TimerState {
-  minutes: number;
-  seconds: number;
   isRunning: boolean;
   isBreak: boolean;
   focusTime: number; // in minutes
   breakTime: number; // in minutes
+  remainingMs: number; // exact while paused; refreshed once per second while running
 }
 
 interface CircularTimerProps {
   onBreakChange?: (isBreak: boolean) => void;
   onRunningChange?: (isRunning: boolean) => void;
-  onTimerFinish?: () => void;
+  onTimerFinish?: (wasBreak: boolean) => void;
   focusTime?: number;
   breakTime?: number;
   userId?: string;
 }
+
+const MAX_MINUTES = 999;
+const TICK_MS = 100;
+const RADIUS = 220;
+const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
+
+const clampMinutes = (minutes: number) => Math.min(Math.max(minutes, 1), MAX_MINUTES);
+
+const fullDurationMs = (state: Pick<TimerState, "isBreak" | "focusTime" | "breakTime">) =>
+  (state.isBreak ? state.breakTime : state.focusTime) * 60_000;
+
+// Updates the ring directly (bypassing React) so it can animate between re-renders
+const drawProgress = (
+  circle: SVGCircleElement | null,
+  remainingMs: number,
+  totalMs: number
+) => {
+  if (!circle) return;
+  const progress = Math.min(Math.max(1 - remainingMs / totalMs, 0), 1);
+  circle.setAttribute(
+    "stroke-dashoffset",
+    (CIRCUMFERENCE - progress * CIRCUMFERENCE).toString()
+  );
+};
 
 export default function CircularTimer({
   onBreakChange,
@@ -29,293 +52,89 @@ export default function CircularTimer({
   breakTime = 5,
   userId,
 }: CircularTimerProps) {
-  const [timer, setTimer] = useState<TimerState>({
-    minutes: 25,
-    seconds: 0,
+  const [timer, setTimer] = useState<TimerState>(() => ({
     isRunning: false,
     isBreak: false,
-    focusTime: 25,
-    breakTime: 5,
-  });
+    focusTime: clampMinutes(focusTime),
+    breakTime: clampMinutes(breakTime),
+    remainingMs: clampMinutes(focusTime) * 60_000,
+  }));
 
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState("25");
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
-  const circleRef = useRef<SVGCircleElement>(null);
   const progressRef = useRef<SVGCircleElement>(null);
-  const prevIsBreakRef = useRef(timer.isBreak);
-  const sessionRecordedRef = useRef(false);
-  const startTimeRef = useRef<number | null>(null);
-  const totalDurationRef = useRef<number>(0);
-  const elapsedTimeRef = useRef<number>(0); // Store elapsed time when paused
+  // Wall-clock time the current run ends; null while paused. Source of truth while running.
+  const endsAtRef = useRef<number | null>(null);
 
-  // Store original times to preserve them when switching modes
-  const originalFocusTime = useRef(focusTime);
-  const originalBreakTime = useRef(breakTime);
-
-  // Update original times when props change
+  // Keep the latest callbacks/user in refs so parent re-renders don't restart the tick loop
+  const onTimerFinishRef = useRef(onTimerFinish);
+  const userIdRef = useRef(userId);
   useEffect(() => {
-    const limitedFocusTime = Math.min(focusTime, 999);
-    const limitedBreakTime = Math.min(breakTime, 999);
+    onTimerFinishRef.current = onTimerFinish;
+    userIdRef.current = userId;
+  });
 
-    originalFocusTime.current = limitedFocusTime;
-    originalBreakTime.current = limitedBreakTime;
-
-    // Only update timer state if not running to avoid interfering with active timer
-    setTimer((prev) => ({
-      ...prev,
-      focusTime: limitedFocusTime,
-      breakTime: limitedBreakTime,
-      // Only update minutes/seconds if timer is not running
-      ...(prev.isRunning
-        ? {}
-        : {
-            minutes: prev.isBreak ? limitedBreakTime : limitedFocusTime,
-            seconds: 0,
-          }),
-    }));
+  // Apply new durations from settings; a running timer keeps its current countdown
+  useEffect(() => {
+    setTimer((prev) => {
+      const next = {
+        ...prev,
+        focusTime: clampMinutes(focusTime),
+        breakTime: clampMinutes(breakTime),
+      };
+      return endsAtRef.current === null
+        ? { ...next, remainingMs: fullDurationMs(next) }
+        : next;
+    });
   }, [focusTime, breakTime]);
 
-  const radius = 220;
-  const circumference = 2 * Math.PI * radius;
-
+  // Draw the ring whenever the timer is idle/paused or its mode/duration changes
   useEffect(() => {
-    if (timer.isRunning) {
-      // Set start time and total duration when timer starts or resumes
-      if (startTimeRef.current === null) {
-        const remainingSeconds = timer.minutes * 60 + timer.seconds;
-        const totalSeconds = timer.isBreak
-          ? timer.breakTime * 60
-          : timer.focusTime * 60;
-        
-        // Check if this is a fresh start (remaining time equals total time) or a resume
-        const isFreshStart = Math.abs(remainingSeconds - totalSeconds) < 1; // Allow 1 second tolerance
-        
-        if (isFreshStart) {
-          // Fresh start - reset elapsed time
-          elapsedTimeRef.current = 0;
-          startTimeRef.current = Date.now();
-          totalDurationRef.current = totalSeconds;
-          console.log(`Fresh start - totalDuration: ${totalDurationRef.current.toFixed(2)}s`);
-        } else {
-          // Resume - use the stored elapsed time and set startTime to continue from there
-          // Calculate what the startTime should be to continue from elapsedTimeRef
-          const now = Date.now();
-          // Set startTime to be in the past by the amount of elapsed time
-          // This way, when we calculate elapsed = now - startTime, we get the correct value
-          startTimeRef.current = now - elapsedTimeRef.current * 1000;
-          totalDurationRef.current = remainingSeconds + elapsedTimeRef.current;
-          
-          // Immediately update progress to avoid any visual jump
-          if (progressRef.current) {
-            const progress = Math.min(elapsedTimeRef.current / totalDurationRef.current, 1);
-            const strokeDashoffset = circumference - progress * circumference;
-            progressRef.current.setAttribute("stroke-dashoffset", strokeDashoffset.toString());
-          }
-          
-          console.log(`Resumed - elapsedTimeRef: ${elapsedTimeRef.current.toFixed(2)}s, remaining: ${remainingSeconds}s, totalDuration: ${totalDurationRef.current.toFixed(2)}s`);
-        }
-      }
-
-      intervalRef.current = setInterval(() => {
-        if (startTimeRef.current) {
-          const elapsed = (Date.now() - startTimeRef.current) / 1000; // elapsed seconds
-          const remaining = Math.max(0, totalDurationRef.current - elapsed);
-
-          if (remaining <= 0) {
-            // Timer finished - immediately switch state
-            const newIsBreak = !timer.isBreak;
-            const completedDuration = timer.isBreak
-              ? originalBreakTime.current
-              : originalFocusTime.current;
-
-            // Record focus session only once when timer finishes
-            if (!timer.isBreak && !sessionRecordedRef.current) {
-              console.log(
-                "Timer finished - recording focus session:",
-                completedDuration,
-                "minutes"
-              );
-              sessionRecordedRef.current = true;
-              if (userId) recordStudySession(completedDuration, userId);
-            }
-
-            // Notify parent component that timer finished
-            setTimeout(() => {
-              onTimerFinish?.();
-            }, 100);
-
-            // Reset refs and switch to new mode
-            startTimeRef.current = null;
-            totalDurationRef.current = 0;
-            elapsedTimeRef.current = 0;
-
-            setTimer({
-              minutes: newIsBreak
-                ? originalBreakTime.current
-                : originalFocusTime.current,
-              seconds: 0,
-              isRunning: false,
-              isBreak: newIsBreak,
-              focusTime: timer.focusTime,
-              breakTime: timer.breakTime,
-            });
-          } else {
-            // Update display time
-            const minutes = Math.floor(remaining / 60);
-            const seconds = Math.floor(remaining % 60);
-
-            setTimer((prev) => ({
-              ...prev,
-              minutes,
-              seconds,
-            }));
-          }
-        }
-      }, 100); // Update every 100ms for smooth animation
-    } else {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
-      // Store elapsed time when paused
-      if (startTimeRef.current !== null) {
-        const pausedAt = Date.now();
-        elapsedTimeRef.current = (pausedAt - startTimeRef.current) / 1000;
-        console.log(`Paused - stored elapsed time: ${elapsedTimeRef.current.toFixed(2)}s, paused at: ${pausedAt}`);
-        startTimeRef.current = null;
-      }
-      // Note: If startTimeRef is already null, elapsedTimeRef should already be set from previous pause
+    if (!timer.isRunning) {
+      drawProgress(progressRef.current, timer.remainingMs, fullDurationMs(timer));
     }
+  }, [timer]);
 
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
-    };
-  }, [
-    timer.isRunning,
-    timer.isBreak,
-    timer.focusTime,
-    timer.breakTime,
-    onTimerFinish,
-  ]);
-
-  // Update circle progress smoothly based on elapsed time
+  // Tick loop while running
   useEffect(() => {
-    if (!progressRef.current) return;
+    if (!timer.isRunning) return;
 
-    const totalSeconds = timer.isBreak
-      ? timer.breakTime * 60
-      : timer.focusTime * 60;
+    const totalMs = fullDurationMs(timer);
 
-    // Use totalDurationRef if available (for resumed timers), otherwise use totalSeconds
-    const totalDuration = totalDurationRef.current > 0 ? totalDurationRef.current : totalSeconds;
+    const tick = () => {
+      if (endsAtRef.current === null) return;
+      const remainingMs = Math.max(0, endsAtRef.current - Date.now());
+      drawProgress(progressRef.current, remainingMs, totalMs);
 
-    let elapsed = 0;
-    let progress = 0;
-
-    if (timer.isRunning) {
-      // Timer is running
-      if (startTimeRef.current && totalDurationRef.current > 0) {
-        // Calculate elapsed from start time (accounts for resume)
-        elapsed = (Date.now() - startTimeRef.current) / 1000;
-        progress = Math.min(elapsed / totalDurationRef.current, 1);
-      } else if (elapsedTimeRef.current > 0) {
-        // Fallback: use stored elapsed time if startTimeRef not set yet (during resume)
-        // Use the same totalDuration to avoid jumps
-        elapsed = elapsedTimeRef.current;
-        progress = Math.min(elapsed / totalDuration, 1);
-      } else {
-        // Last resort: calculate from remaining time (only for fresh starts)
-        const remainingSeconds = timer.minutes * 60 + timer.seconds;
-        elapsed = totalSeconds - remainingSeconds;
-        progress = Math.min(Math.max(elapsed, 0) / totalSeconds, 1);
-      }
-    } else {
-      // Timer is paused - use stored elapsed time
-      // Use the same totalDuration that was used when running to avoid jumps
-      const pausedTotalDuration = totalDurationRef.current > 0 ? totalDurationRef.current : totalSeconds;
-      
-      if (elapsedTimeRef.current > 0) {
-        elapsed = elapsedTimeRef.current;
-        progress = Math.min(elapsed / pausedTotalDuration, 1);
-      } else {
-        // Fallback: calculate from remaining time
-        const remainingSeconds = timer.minutes * 60 + timer.seconds;
-        elapsed = totalSeconds - remainingSeconds;
-        progress = Math.min(elapsed / totalSeconds, 1);
-      }
-    }
-
-    const strokeDashoffset = circumference - progress * circumference;
-    progressRef.current.setAttribute(
-      "stroke-dashoffset",
-      strokeDashoffset.toString()
-    );
-
-    // Check if timer state switched (focus to break or break to focus)
-    if (prevIsBreakRef.current !== timer.isBreak) {
-      prevIsBreakRef.current = timer.isBreak;
-    }
-  }, [
-    timer.minutes,
-    timer.seconds,
-    timer.isBreak,
-    timer.isRunning,
-    timer.focusTime,
-    timer.breakTime,
-    circumference,
-  ]);
-
-  // Separate effect for smooth progress updates during timer running
-  useEffect(() => {
-    if (!timer.isRunning || !progressRef.current) return;
-
-    // Immediately update progress when resuming to avoid jump to 0
-    const updateProgress = () => {
-      if (!progressRef.current) return;
-
-      const totalSeconds = timer.isBreak
-        ? timer.breakTime * 60
-        : timer.focusTime * 60;
-
-      // Use totalDurationRef if available (for resumed timers), otherwise use totalSeconds
-      const totalDuration = totalDurationRef.current > 0 ? totalDurationRef.current : totalSeconds;
-
-      let elapsed = 0;
-      let progress = 0;
-
-      if (startTimeRef.current && totalDurationRef.current > 0) {
-        // Use startTimeRef calculation (most accurate)
-        elapsed = (Date.now() - startTimeRef.current) / 1000;
-        progress = Math.min(elapsed / totalDurationRef.current, 1);
-      } else if (elapsedTimeRef.current > 0) {
-        // Fallback: use stored elapsed time (for resume before startTimeRef is set)
-        // Use the same totalDuration to avoid jumps
-        elapsed = elapsedTimeRef.current;
-        progress = Math.min(elapsed / totalDuration, 1);
-      } else {
-        // Last resort: calculate from remaining time
-        const remainingSeconds = timer.minutes * 60 + timer.seconds;
-        elapsed = totalSeconds - remainingSeconds;
-        progress = Math.min(Math.max(elapsed, 0) / totalSeconds, 1);
+      if (remainingMs > 0) {
+        // Only re-render when the displayed second changes
+        setTimer((prev) =>
+          Math.ceil(prev.remainingMs / 1000) === Math.ceil(remainingMs / 1000)
+            ? prev
+            : { ...prev, remainingMs }
+        );
+        return;
       }
 
-      const strokeDashoffset = circumference - progress * circumference;
-      progressRef.current.setAttribute(
-        "stroke-dashoffset",
-        strokeDashoffset.toString()
-      );
+      // Finished — switch modes, record focus sessions, notify parent
+      endsAtRef.current = null;
+      clearInterval(interval);
+      const wasBreak = timer.isBreak;
+      if (!wasBreak && userIdRef.current) {
+        recordStudySession(timer.focusTime);
+      }
+      setTimer((prev) => {
+        const next = { ...prev, isRunning: false, isBreak: !wasBreak };
+        return { ...next, remainingMs: fullDurationMs(next) };
+      });
+      onTimerFinishRef.current?.(wasBreak);
     };
 
-    // Update immediately
-    updateProgress();
-
-    // Then update smoothly
-    const progressInterval = setInterval(updateProgress, 50);
-
-    return () => clearInterval(progressInterval);
-  }, [timer.isRunning, circumference, timer.isBreak, timer.focusTime, timer.breakTime, timer.minutes, timer.seconds]);
+    tick();
+    const interval = setInterval(tick, TICK_MS);
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- restart only on run/mode/duration changes, not every second
+  }, [timer.isRunning, timer.isBreak, timer.focusTime, timer.breakTime]);
 
   // Notify parent component about break state changes
   useEffect(() => {
@@ -328,40 +147,28 @@ export default function CircularTimer({
   }, [timer.isRunning, onRunningChange]);
 
   const startTimer = () => {
-    sessionRecordedRef.current = false; // Reset flag for new session
-    // elapsedTimeRef is preserved for resume, or 0 for fresh start
+    endsAtRef.current = Date.now() + timer.remainingMs;
     setTimer((prev) => ({ ...prev, isRunning: true }));
   };
 
   const stopTimer = () => {
-    // Don't reset startTimeRef here - let the useEffect handle it so elapsedTimeRef is stored
-    setTimer((prev) => ({ ...prev, isRunning: false }));
+    const remainingMs =
+      endsAtRef.current === null
+        ? timer.remainingMs
+        : Math.max(0, endsAtRef.current - Date.now());
+    endsAtRef.current = null;
+    setTimer((prev) => ({ ...prev, isRunning: false, remainingMs }));
   };
 
+  // Resets a focus session, or skips a break back to focus
   const resetTimer = () => {
-    startTimeRef.current = null; // Reset start time
-    elapsedTimeRef.current = 0; // Reset elapsed time
-    if (timer.isBreak) {
-      // Skip break - switch to focus mode
-      setTimer({
-        minutes: originalFocusTime.current,
-        seconds: 0,
-        isRunning: false,
-        isBreak: false,
-        focusTime: timer.focusTime,
-        breakTime: timer.breakTime,
-      });
-    } else {
-      // Reset focus timer
-      setTimer({
-        minutes: originalFocusTime.current,
-        seconds: 0,
-        isRunning: false,
-        isBreak: false,
-        focusTime: timer.focusTime,
-        breakTime: timer.breakTime,
-      });
-    }
+    endsAtRef.current = null;
+    setTimer((prev) => ({
+      ...prev,
+      isRunning: false,
+      isBreak: false,
+      remainingMs: prev.focusTime * 60_000,
+    }));
   };
 
   const handleTimeClick = () => {
@@ -374,33 +181,19 @@ export default function CircularTimer({
   };
 
   const handleTimeEdit = (newTime: number) => {
-    const limitedTime = Math.min(newTime, 999); // Limit to 3 digits
-    if (limitedTime > 0) {
-      if (timer.isBreak) {
-        originalBreakTime.current = limitedTime;
-        setTimer((prev) => ({
-          ...prev,
-          breakTime: limitedTime,
-          minutes: limitedTime,
-          seconds: 0,
-        }));
-      } else {
-        originalFocusTime.current = limitedTime;
-        setTimer((prev) => ({
-          ...prev,
-          focusTime: limitedTime,
-          minutes: limitedTime,
-          seconds: 0,
-        }));
-      }
-    }
+    const minutes = clampMinutes(newTime);
+    setTimer((prev) => ({
+      ...prev,
+      ...(prev.isBreak ? { breakTime: minutes } : { focusTime: minutes }),
+      remainingMs: minutes * 60_000,
+    }));
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setEditValue(value);
     const newTime = parseInt(value);
-    if (!isNaN(newTime) && newTime > 0 && newTime <= 999) {
+    if (!isNaN(newTime) && newTime > 0 && newTime <= MAX_MINUTES) {
       handleTimeEdit(newTime);
     }
   };
@@ -409,13 +202,16 @@ export default function CircularTimer({
     setIsEditing(false);
   };
 
-  const formatTime = (minutes: number, seconds: number) => {
-    const safeMinutes = Math.min(minutes ?? 0, 999); // Limit to 3 digits
-    const safeSeconds = seconds ?? 0;
-    return `${safeMinutes.toString().padStart(2, "0")}:${safeSeconds
+  const formatTime = (remainingMs: number) => {
+    const totalSeconds = Math.ceil(remainingMs / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes.toString().padStart(2, "0")}:${seconds
       .toString()
       .padStart(2, "0")}`;
   };
+
+  const accent = timer.isBreak ? "#936dfc" : "#6db0fc";
 
   return (
     <div className="text-center">
@@ -430,10 +226,9 @@ export default function CircularTimer({
         >
           {/* Background circle */}
           <circle
-            ref={circleRef}
             cx="288"
             cy="288"
-            r={radius}
+            r={RADIUS}
             stroke="rgba(255, 255, 255, 0.2)"
             strokeWidth="6"
             fill="none"
@@ -443,13 +238,14 @@ export default function CircularTimer({
             ref={progressRef}
             cx="288"
             cy="288"
-            r={radius}
-            stroke={timer.isBreak ? "#936dfc" : "#6db0fc"}
+            r={RADIUS}
+            stroke={accent}
             strokeWidth="6"
             fill="none"
             strokeLinecap="round"
-            strokeDasharray={circumference}
-            className="transition-all duration-100 ease-out"
+            strokeDasharray={CIRCUMFERENCE}
+            strokeDashoffset={CIRCUMFERENCE}
+            className="transition-[stroke-dashoffset] duration-100 ease-linear"
           />
         </svg>
 
@@ -464,7 +260,7 @@ export default function CircularTimer({
                 onBlur={handleInputBlur}
                 className="text-4xl font-mono font-bold text-white bg-transparent border-none text-center w-20 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                 min="1"
-                max="60"
+                max={MAX_MINUTES}
                 autoFocus
               />
               <div className="text-sm text-white/60">minutes</div>
@@ -476,7 +272,7 @@ export default function CircularTimer({
               title="Click to edit time"
             >
               <div className="text-4xl font-mono font-bold text-white mb-2">
-                {formatTime(timer.minutes, timer.seconds)}
+                {formatTime(timer.remainingMs)}
               </div>
             </div>
           )}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { getHistoryData, HistoryData } from "@/lib/study-time-api";
 
 interface HistoryPopupProps {
@@ -16,27 +16,10 @@ export default function HistoryPopup({ isOpen, onClose, userId }: HistoryPopupPr
     heatmapData: [],
   });
 
-  useEffect(() => {
-    if (isOpen) {
-      fetchHistoryData();
-    }
-  }, [isOpen]);
-
-  // Refresh data periodically when popup is open
-  useEffect(() => {
-    if (isOpen) {
-      const interval = setInterval(() => {
-        fetchHistoryData();
-      }, 5000); // Refresh every 5 seconds
-
-      return () => clearInterval(interval);
-    }
-  }, [isOpen]);
-
-  const fetchHistoryData = async () => {
+  const fetchHistoryData = useCallback(async () => {
     if (!userId) return;
     try {
-      const data = await getHistoryData(userId);
+      const data = await getHistoryData();
       setHistoryData(data);
     } catch (error) {
       console.error("Error fetching history data:", error);
@@ -47,7 +30,14 @@ export default function HistoryPopup({ isOpen, onClose, userId }: HistoryPopupPr
         heatmapData: [],
       });
     }
-  };
+  }, [userId]);
+
+  // Fetch fresh data each time the popup opens (the refresh button covers the rest)
+  useEffect(() => {
+    if (isOpen) {
+      fetchHistoryData();
+    }
+  }, [isOpen, fetchHistoryData]);
 
   const formatTime = (minutes: number) => {
     const hours = Math.floor(minutes / 60);
@@ -183,10 +173,10 @@ export default function HistoryPopup({ isOpen, onClose, userId }: HistoryPopupPr
           </div>
         </div>
 
-        {/* 60-Day Heatmap */}
+        {/* Past-year Heatmap */}
         <div className="bg-white/10 backdrop-blur-md rounded-xl p-6 border border-white/20">
           <h3 className="text-lg font-semibold text-white mb-4">
-            60-Day Activity Heatmap
+            Past Year Activity
           </h3>
           <div className="flex flex-wrap gap-1 mb-4 overflow-x-auto">
             {historyData.heatmapData.map((day, index) => (

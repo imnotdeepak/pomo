@@ -31,8 +31,7 @@ export interface HistoryData {
 
 // Record a completed focus session
 export async function recordStudySession(
-  durationMinutes: number,
-  _userId: string
+  durationMinutes: number
 ): Promise<StudySession | null> {
   try {
     const res = await fetch("/api/sessions", {
@@ -49,9 +48,10 @@ export async function recordStudySession(
 }
 
 // Get complete history data
-export async function getHistoryData(_userId?: string): Promise<HistoryData> {
+export async function getHistoryData(): Promise<HistoryData> {
   try {
-    const res = await fetch("/api/sessions");
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const res = await fetch(`/api/sessions?tz=${encodeURIComponent(tz)}`);
     if (!res.ok) throw new Error(await res.text());
     return res.json();
   } catch (error) {

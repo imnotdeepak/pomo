@@ -1,11 +1,12 @@
 "use client";
 
-import React, { useState, Suspense, lazy } from "react";
+import React, { useState, useEffect, useCallback, Suspense, lazy } from "react";
 import { useAuth, UserButton } from "@clerk/nextjs";
-import { useEffect } from "react"
 
 const Dithering = lazy(() =>
-  import("@paper-design/shaders-react").then((mod) => ({ default: mod.Dithering }))
+  import("@paper-design/shaders-react").then((mod) => ({
+    default: mod.Dithering,
+  })),
 );
 import CircularTimer from "@/components/CircularTimer";
 import KanbanBoard from "@/components/KanbanBoard";
@@ -17,9 +18,15 @@ export default function Dashboard() {
   const [showKanban, setShowKanban] = useState(false);
   const [isBreak, setIsBreak] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [focusTime, setFocusTime] = useState<number | string>(25);
-  const [breakTime, setBreakTime] = useState<number | string>(5);
-  const [timerFinished, setTimerFinished] = useState<boolean>(false);
+  const [focusTime, setFocusTime] = useState(25);
+  const [breakTime, setBreakTime] = useState(5);
+  // Values being edited in the settings modal; only applied on Save
+  const [draftFocusTime, setDraftFocusTime] = useState<number | string>(25);
+  const [draftBreakTime, setDraftBreakTime] = useState<number | string>(5);
+  const [finishEvent, setFinishEvent] = useState<{
+    id: number;
+    wasBreak: boolean;
+  } | null>(null);
   const [isTimerRunning, setIsTimerRunning] = useState<boolean>(false);
   const [showHistory, setShowHistory] = useState<boolean>(false);
 
@@ -29,6 +36,10 @@ export default function Dashboard() {
     }
   }, [isLoaded, userId]);
 
+  const handleTimerFinish = useCallback((wasBreak: boolean) => {
+    setFinishEvent((prev) => ({ id: (prev?.id ?? 0) + 1, wasBreak }));
+  }, []);
+
   if (!isLoaded) {
     return (
       <div className="min-h-screen bg-black relative flex items-center justify-center">
@@ -37,26 +48,27 @@ export default function Dashboard() {
     );
   }
 
+  const openSettings = () => {
+    setDraftFocusTime(focusTime);
+    setDraftBreakTime(breakTime);
+    setShowSettings(true);
+  };
+
   const handleSaveSettings = () => {
+    // Empty fields keep their previous value
+    if (typeof draftFocusTime === "number") setFocusTime(draftFocusTime);
+    if (typeof draftBreakTime === "number") setBreakTime(draftBreakTime);
     setShowSettings(false);
-    // The CircularTimer will receive the new values via props
   };
-
-  const handleTimerFinish = () => {
-    setTimerFinished(true);
-    // Reset the flag after a short delay to allow for multiple timer finishes
-    setTimeout(() => setTimerFinished(false), 100);
-  };
-
-
 
   return (
     <div className="min-h-screen bg-black relative overflow-hidden">
-
       {/* Dithering shader — always visible, cycles blue → green → blue */}
       <div className="absolute inset-0 pointer-events-none">
         <Suspense fallback={null}>
-          <div className={`${isBreak ? "focus-shader-break" : "focus-shader"} absolute inset-0 opacity-60 mix-blend-screen`}>
+          <div
+            className={`${isBreak ? "focus-shader-break" : "focus-shader"} absolute inset-0 opacity-60 mix-blend-screen`}
+          >
             <Dithering
               colorBack="#00000000"
               colorFront="#6db0fc"
@@ -69,7 +81,6 @@ export default function Dashboard() {
           </div>
         </Suspense>
       </div>
-
 
       {/* Kanban board button - bottom left */}
       <button
@@ -123,7 +134,9 @@ export default function Dashboard() {
           <div className="flex items-center space-x-3">
             {/* Clock Settings Button */}
             <button
-              onClick={() => setShowSettings(!showSettings)}
+              onClick={() =>
+                showSettings ? setShowSettings(false) : openSettings()
+              }
               className="transition-transform duration-200 hover:scale-105"
               title="Timer Settings"
             >
@@ -182,14 +195,14 @@ export default function Dashboard() {
                     min="1"
                     max="999"
                     maxLength={3}
-                    value={focusTime}
+                    value={draftFocusTime}
                     onChange={(e) => {
                       const value = e.target.value;
                       if (value === "") {
-                        setFocusTime("");
+                        setDraftFocusTime("");
                       } else {
                         const numValue = parseInt(value);
-                        setFocusTime(numValue < 1 ? 1 : numValue);
+                        setDraftFocusTime(Math.min(Math.max(numValue, 1), 999));
                       }
                     }}
                     className="w-full px-4 py-2 bg-black/20 border border-white/30 rounded-lg text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-blue-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
@@ -205,14 +218,14 @@ export default function Dashboard() {
                     min="1"
                     max="999"
                     maxLength={3}
-                    value={breakTime}
+                    value={draftBreakTime}
                     onChange={(e) => {
                       const value = e.target.value;
                       if (value === "") {
-                        setBreakTime("");
+                        setDraftBreakTime("");
                       } else {
                         const numValue = parseInt(value);
-                        setBreakTime(numValue < 1 ? 1 : numValue);
+                        setDraftBreakTime(Math.min(Math.max(numValue, 1), 999));
                       }
                     }}
                     className="w-full px-4 py-2 bg-black/20 border border-white/30 rounded-lg text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-blue-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
@@ -239,25 +252,30 @@ export default function Dashboard() {
         )}
 
         {/* Main content - centered */}
-        <div className="flex-1 flex flex-col items-center justify-center">
-          <div className="mb-8">
-            <CircularTimer
-              onBreakChange={setIsBreak}
-              onRunningChange={setIsTimerRunning}
-              onTimerFinish={handleTimerFinish}
-              focusTime={typeof focusTime === "number" ? focusTime : 25}
-              breakTime={typeof breakTime === "number" ? breakTime : 5}
-              userId={userId ?? undefined}
-            />
-          </div>
+        <div className="flex-1 flex flex-col items-center justify-center px-4 pb-24">
+          {/* Glass panel — light blur so the shader still shows through */}
+          <div
+            className="relative w-full max-w-4xl rounded-[2.5rem] px-8 py-10 bg-black/70 backdrop-blur-[6px] backdrop-saturate-150 border border-white/20 transition-[box-shadow] duration-1000"
+            style={{
+              boxShadow: `inset 0 1px 0 rgba(255,255,255,0.35), inset 0 -32px 64px rgba(0,0,0,0.2), 0 24px 64px rgba(0,0,0,0.45), 0 0 120px ${isBreak ? "#936dfc" : "#6db0fc"}1f`,
+            }}
+          >
+            <div className="relative">
+              <CircularTimer
+                onBreakChange={setIsBreak}
+                onRunningChange={setIsTimerRunning}
+                onTimerFinish={handleTimerFinish}
+                focusTime={focusTime}
+                breakTime={breakTime}
+                userId={userId ?? undefined}
+              />
 
-          {/* Sound Control Bar */}
-          <div className="w-full max-w-4xl px-4">
-            <SoundControlBar
-              isRunning={isTimerRunning}
-              isBreak={isBreak}
-              onTimerFinish={timerFinished ? handleTimerFinish : undefined}
-            />
+              <SoundControlBar
+                isRunning={isTimerRunning}
+                isBreak={isBreak}
+                finishEvent={finishEvent}
+              />
+            </div>
           </div>
 
           {showKanban && (

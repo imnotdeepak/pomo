@@ -1,11 +1,13 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
 
 interface SoundControlBarProps {
   isRunning: boolean;
   isBreak: boolean;
-  onTimerFinish?: () => void;
+  // Changes identity each time a session finishes
+  finishEvent?: { id: number; wasBreak: boolean } | null;
 }
 
 interface SoundFiles {
@@ -40,7 +42,7 @@ const alarmUrls: Record<string, string> = {
 export default function SoundControlBar({
   isRunning,
   isBreak,
-  onTimerFinish,
+  finishEvent,
 }: SoundControlBarProps) {
   const [selectedStudySound, setSelectedStudySound] = useState<string>("none");
   const [selectedAlarmSound, setSelectedAlarmSound] = useState<string>("none");
@@ -96,17 +98,17 @@ export default function SoundControlBar({
     }
   }, [selectedAlarmSound]);
 
-  // Handle alarm sound when timer finishes
+  // Play the alarm once per finished session
+  const playAlarmSoundRef = useRef(playAlarmSound);
   useEffect(() => {
-    if (onTimerFinish) {
-      // Show popup for the NEXT session type (opposite of current)
-      setCompletedSessionType(!isBreak);
-      // This will be called when timer finishes
-      if (selectedAlarmSound !== "none") {
-        playAlarmSound();
-      }
-    }
-  }, [onTimerFinish, selectedAlarmSound, isBreak, playAlarmSound]);
+    playAlarmSoundRef.current = playAlarmSound;
+  }, [playAlarmSound]);
+
+  useEffect(() => {
+    if (!finishEvent) return;
+    setCompletedSessionType(finishEvent.wasBreak);
+    playAlarmSoundRef.current();
+  }, [finishEvent]);
 
   const stopAlarm = () => {
     if (alarmAudioRef.current) {
@@ -154,8 +156,8 @@ export default function SoundControlBar({
 
   return (
     <>
-      {/* Sound Control Bar */}
-      <div className="bg-white/10 backdrop-blur-md rounded-2xl p-6 border border-white/20 mt-6">
+      {/* Sound Control Bar — sits inside the dashboard's glass panel */}
+      <div className="mt-10 pt-8 border-t border-white/15">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {/* Study Sounds Dropdown */}
           <div>
@@ -249,8 +251,9 @@ export default function SoundControlBar({
         />
       )}
 
-      {/* Alarm Popup Modal */}
-      {showAlarmPopup && (
+      {/* Alarm Popup Modal — portaled to <body> so the parent's backdrop-filter
+          doesn't become the containing block for `fixed` positioning */}
+      {showAlarmPopup && createPortal(
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           {/* Blurred background overlay */}
           <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
@@ -299,7 +302,8 @@ export default function SoundControlBar({
               Stop Alarm
             </button>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );
