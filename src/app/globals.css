@@ -148,6 +148,44 @@ body {
   background: #ffffff !important;
 }
 
+/* Toggle ON (annual): white track, black thumb so it stays visible */
+.cl-switchRoot:has(input:checked) .cl-switchIndicator,
+.cl-switchIndicator[aria-checked="true"],
+.cl-switchIndicator[data-checked="true"],
+[role="switch"][aria-checked="true"].cl-switchIndicator,
+.cl-switchRoot[aria-checked="true"] .cl-switchIndicator,
+.cl-switchIndicator__checked {
+  background-color: #ffffff !important;
+  background: #ffffff !important;
+}
+.cl-switchRoot:has(input:checked) .cl-switchThumb,
+.cl-switchIndicator[aria-checked="true"] .cl-switchThumb,
+.cl-switchIndicator[data-checked="true"] .cl-switchThumb,
+.cl-switchRoot[aria-checked="true"] .cl-switchThumb,
+.cl-switchIndicator__checked .cl-switchThumb {
+  background-color: #000000 !important;
+  background: #000000 !important;
+}
+
+/* Pricing toggle label: Clerk's label is static ("Billed annually"), so swap
+   the visible text based on whether the switch is checked. */
+.cl-pricingTableCardPeriodToggle .cl-switchRoot > span:last-child {
+  visibility: hidden;
+  position: relative;
+  white-space: nowrap;
+}
+.cl-pricingTableCardPeriodToggle .cl-switchRoot > span:last-child::after {
+  content: "Billed monthly";
+  visibility: visible;
+  position: absolute;
+  top: 0;
+  left: 0;
+  padding-inline-start: inherit;
+}
+.cl-pricingTableCardPeriodToggle .cl-switchRoot:has(input:checked) > span:last-child::after {
+  content: "Billed annually";
+}
+
 /* Focus: blue (#6db0fc ~210°) → green (#8ace00 ~80°) */
 @keyframes focusHue {
   0%, 100% { filter: hue-rotate(0deg); }

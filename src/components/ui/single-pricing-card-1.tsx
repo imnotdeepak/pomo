@@ -43,7 +43,7 @@ export function Pricing() {
 						className="mx-auto w-full max-w-2xl space-y-2"
 					>
 						<div
-							className="grid md:grid-cols-2 bg-card relative border rounded-[48px] overflow-hidden p-8"
+							className="grid gap-4 md:grid-cols-2 bg-card relative border rounded-[48px] overflow-hidden p-8"
 							onMouseEnter={() => setIsHovered(true)}
 							onMouseLeave={() => setIsHovered(false)}
 						>
@@ -65,22 +65,18 @@ export function Pricing() {
 							<PlusIcon className="absolute -bottom-3 -left-3 size-5.5" />
 							<PlusIcon className="absolute -right-3 -bottom-3 size-5.5" />
 
-							<div className="w-full px-4 pt-5 pb-4 relative z-10">
+							<div className="relative z-10 flex w-full flex-col rounded-lg border border-transparent px-4 pt-5 pb-4">
 								<div className="space-y-1">
-									<div className="flex items-center justify-between">
+									<div className="flex min-h-6 items-center justify-between">
 										<h3 className="leading-none font-semibold">Monthly</h3>
-										<div className="flex items-center gap-x-1">
-											<span className="text-muted-foreground text-sm line-through">$8.99</span>
-											<Badge variant="secondary">11% off</Badge>
-										</div>
 									</div>
-									<p className="text-muted-foreground text-sm">Best value for growing businesses!</p>
+									<p className="text-muted-foreground min-h-10 text-sm">Best value for growing businesses!</p>
 								</div>
-								<div className="mt-10 space-y-4">
+								<div className="mt-auto space-y-4 pt-10">
 									<div className="text-muted-foreground flex items-end gap-0.5 text-xl">
 										<span>$</span>
 										<span className="text-foreground -mb-0.5 text-4xl font-extrabold tracking-tighter md:text-5xl">
-											7.99
+											1.99
 										</span>
 										<span>/month</span>
 									</div>
@@ -89,7 +85,7 @@ export function Pricing() {
 									</Button>
 								</div>
 							</div>
-							<div className="relative z-10 w-full rounded-lg border px-4 pt-5 pb-4">
+							<div className="relative z-10 flex w-full flex-col rounded-lg border px-4 pt-5 pb-4">
 								<BorderTrail
 									style={{
 										boxShadow:
@@ -98,20 +94,20 @@ export function Pricing() {
 									size={100}
 								/>
 								<div className="space-y-1">
-									<div className="flex items-center justify-between">
+									<div className="flex min-h-6 items-center justify-between">
 										<h3 className="leading-none font-semibold">Yearly</h3>
 										<div className="flex items-center gap-x-1">
-											<span className="text-muted-foreground text-sm line-through">$8.99</span>
-											<Badge>22% off</Badge>
+											<span className="text-muted-foreground text-sm line-through">$1.99</span>
+											<Badge>25% off</Badge>
 										</div>
 									</div>
-									<p className="text-muted-foreground text-sm">Unlock savings with an annual commitment!</p>
+									<p className="text-muted-foreground min-h-10 text-sm">Unlock savings with an annual commitment!</p>
 								</div>
-								<div className="mt-10 space-y-4">
-									<div className="text-muted-foreground flex items-end text-xl">
+								<div className="mt-auto space-y-4 pt-10">
+									<div className="text-muted-foreground flex items-end gap-0.5 text-xl">
 										<span>$</span>
 										<span className="text-foreground -mb-0.5 text-4xl font-extrabold tracking-tighter md:text-5xl">
-											6.99
+											1.50
 										</span>
 										<span>/month</span>
 									</div>
